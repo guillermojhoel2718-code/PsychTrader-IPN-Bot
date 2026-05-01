@@ -1,0 +1,142 @@
+### Skill: Exit Logic (ETH 15m Psychology System)
+
+Responsabilidad:  
+Decidir si el bot debe hacer *cashout* (cerrar posición) o mantenerla abierta en el mercado de ETH 15m de Polymarket, aplicando las reglas de la sección 3 de `claude.md` (3.1–3.3) y los filtros de riesgo de sesión.
+
+Entradas:
+- `MarketState`:
+  - `price_now`: precio actual de ETH.
+  - `bet_price`: precio actual de la cuota Polymarket (0–1).
+  - `t`: segundos restantes de la ronda (0–900).
+  - `vol_state`: `low` | `medium` | `high`.
+  - `is_day`: booleano (horario diurno o nocturno).
+  - `delta_15m`: cambio de precio de ETH en los últimos 15 minutos.
+
+- `Position`:
+  - `direction`: `"UP"` o `"DOWN"`.
+  - `pos_size`: tamaño en USD.
+  - `entry_bet_price`: precio de la cuota al entrar.
+  - `entry_time`: timestamp de entrada.
+  - `min_pnl`: peor PnL flotante visto hasta ahora.
+  - `max_pnl`: mejor PnL flotante visto hasta ahora.
+  - `open`: booleano (si la posición sigue abierta).
+
+- `SessionState` (resumen de sesión):
+  - `pnl_session`: PnL acumulado en USD.
+  - `time_now`: timestamp actual (para calcular `time_since_open`).
+  - Parámetros de riesgo/TP adicionales desde `settings`.
+
+- `Settings`:
+  - `indecise_range_night`: [min, max] rango de oscilación de `bet_price` en 30–60 s para marcar indecisa de noche (ej. [0.30, 0.80]).
+  - `indecise_range_day`: [min, max] rango de oscilación de `bet_price` en 30–60 s para indecisa de día (ej. [0.15, 0.40]).
+  - `min_profit_indecise_usd`: PnL mínimo para cashout en indecisa (ej. 0.20).
+  - `remontada_threshold_usd`: valor de remontada (ej. 2.0).
+  - `correction_tp_range_usd`: rango de TP en correcciones (ej. [1.0, 2.0]).
+  - Otros límites de pérdida opcionales (por ejemplo, stop general -2 USD).
+
+Salidas:
+- `ExitDecision`:
+  - `action`: `"CLOSE"` o `"HOLD"`.
+  - `reason`: texto con la regla que disparó la decisión (ej. `"indecise_cashout_0_2usd"`, `"remontada_2usd"`, `"correction_tp"`).
+
+---
+
+#### 1. Cálculo de PnL flotante
+
+El skill asume que existe una función externa para calcular PnL de la posición dada la `bet_price` actual:
+
+- `pnl = calcular_pnl(position, bet_price)`
+
+Esta función no se implementa aquí; solo se usa su resultado.  
+El skill también puede actualizar `min_pnl` y `max_pnl` de la posición.
+
+---
+
+#### 2. Cashout por indecisión con pequeño profit (Regla 3.1)
+
+1. Identificar si el mercado está `indecise`:
+   - Se observa la oscilación de `bet_price` en una ventana reciente de 30–60 s.
+   - Se calcula `range_bet_price = max(bet_price_window) - min(bet_price_window)`.
+   - En horario de noche (`is_day = false`):
+     - Si `indecise_range_night[0] <= range_bet_price <= indecise_range_night[1]`, se marca `indecise = true`.
+   - En horario de día (`is_day = true`):
+     - Si `indecise_range_day[0] <= range_bet_price <= indecise_range_day[1]`, se marca `indecise = true`.
+
+2. Regla de salida:
+   - Si `indecise = true`
+   - y `pnl >= min_profit_indecise_usd` (ej. 0.20 USD),
+   - y (`t <= 50` ó `time_since_open >= 60` s),
+   - entonces:
+     - `action = "CLOSE"`,
+     - `reason = "indecise_cashout_min_profit"`.
+
+---
+
+#### 3. Cashout por remontada (Regla 3.3)
+
+1. Se usa `min_pnl` de la posición para saber cuánto llegó a estar en rojo.
+2. Si:
+   - `position.min_pnl <= -remontada_threshold_usd` (ej. -2 USD),
+   - y el PnL actual `pnl >= +remontada_threshold_usd`,
+   - y `t > 60` (idealmente la remontada se da antes de los últimos 60 s),
+3. entonces:
+   - `action = "CLOSE"`,
+   - `reason = "remontada_2usd"`.
+
+Esta regla tiene prioridad alta: si se cumple, se recomienda cerrar siempre para capturar la remontada.
+
+---
+
+#### 4. Cashout en corrección moderada (correction TP)
+
+1. Si:
+   - `abs(delta_15m)` está dentro del rango de corrección definido (por ejemplo entre 3 y 4 USD),
+   - y el PnL actual `pnl` está dentro de `correction_tp_range_usd` (ej. entre +1 y +2 USD),
+2. entonces:
+   - `action = "CLOSE"`,
+   - `reason = "correction_tp"`.
+
+Esta regla implementa la idea de tomar profits relativamente pequeños después de movimientos de 3–4 USD para no esperar un movimiento perfecto.
+
+---
+
+#### 5. Stop de seguridad (opcional pero recomendado)
+
+Además de las reglas anteriores, se puede implementar un stop general:
+
+- Si `pnl <= -remontada_threshold_usd` (ej. -2 USD) y no se está en una condición de remontada (todavía no ha vuelto a +2),  
+  - se puede optar por `action = "CLOSE"`,  
+  - `reason = "stop_loss_basic"`.
+
+Este stop puede estar parametrizado o incluso desactivado según `settings`.
+
+---
+
+#### 6. Interacción con límites de sesión
+
+El skill de salida no cierra la sesión, pero puede consultar `pnl_session`:
+
+- Si `pnl_session <= max_session_loss_usd` (ej. -10 USD), puede sugerir:
+  - `action = "CLOSE"` en cuanto haya una oportunidad razonable de salida en verde,  
+  - o evitar mantener posiciones abiertas demasiado tiempo (más conservador).
+
+La aplicación estricta de pausa de 30 min tras -10 USD se gestiona en el skill `risk_safety`, no en `exit_logic`, pero `exit_logic` puede marcar razones en su `reason`.
+
+---
+
+#### Lógica de salida del skill
+
+Algoritmo de alto nivel:
+
+1. Calcular `pnl` actual y actualizar `min_pnl`/`max_pnl` de la posición.
+2. Evaluar, en este orden:
+   - Regla de **remontada**.
+   - Regla de **indecisa con pequeño profit**.
+   - Regla de **correction TP**.
+   - Regla de **stop básico** (si está activada).
+3. La primera regla que se cumpla decide el `action = "CLOSE"`.
+4. Si ninguna regla se cumple:
+   - `action = "HOLD"`,  
+   - `reason = "hold_no_exit_condition"`.
+
+Este skill no realiza efecto externo; solo devuelve la recomendación de cierre o mantenimiento.

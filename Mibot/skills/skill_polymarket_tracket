@@ -1,0 +1,19 @@
+### Skill: Polymarket Tracker (ETH 15m)
+
+Responsabilidad:  
+Leer el mercado de ETH 15m en Polymarket, calcular variables básicas y marcar estados de volatilidad/tendencia.
+
+Entradas:
+- `price_now` (precio actual de ETH desde el exchange).
+- `round_start` (timestamp de inicio de la ronda 15m).
+
+Salidas:
+- `Δ5m`, `Δ15m`  
+- `t` (segundos restantes hasta final de ronda)  
+- `bet_price` (cuota YES/NO en Polymarket)  
+- `vol_state` (low/medium/high, basado en rango de ETH en 5–15m)  
+- `trend_state` (provisional, derivado de `Δ5m / Δ15m`)
+
+Reglas de actualización:
+- Actualizar cada 5–10 segundos mientras la ronda esté activa.  
+- Publicar un objeto `MarketState` que será consumido por `skill_entry_logic`.

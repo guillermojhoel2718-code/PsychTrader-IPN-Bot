@@ -1,0 +1,24 @@
+### Skill: Risk Safety (preusetools hook)
+
+Responsabilidad:  
+Validar cualquier `TradeSignal` o `Cashout` antes de que el bot intente ejecutarlo en la red (via MetaMask).
+
+Entradas:
+- `signal` (entrada o salida de posición).  
+- `pnl_session` acumulado.  
+- Límite de riesgo:  
+  - `max_trade_size = 5` USD.  
+  - `max_session_loss = -10` USD.  
+  - `allowed_contracts = [addr_v0_uniswap/Polymarket]`  
+  - `max_gas = 0.005 ETH` (ejemplo).
+
+Reglas de seguridad:
+1. Si `pos_size > 5` → rechazar `TradeSignal`.  
+2. Si `pnl_session ≤ -10` → rechazar entradas nuevas.  
+3. Si `contract` no está en `allowed_contracts` → rechazar.  
+4. Si `gas` excede `max_gas` → rechazar o ajustar.  
+5. Si `t < 30` → rechazar entrada nueva.
+
+Salida:
+- `ValidatedSignal` (si pasa), o `None` (si es rechazado).  
+- Este `ValidatedSignal` alimenta el **MetaHook** en el navegador.

@@ -1,0 +1,56 @@
+# PsychTrader IPN Bot – Polymarket
+
+Sistema modular de trading para Polymarket, diseñado para ejecutarse 24/7 en modo simulación (paper trading) mientras se habilita el acceso completo a la CLOB API.
+
+## Estado actual
+
+- Conexión a Polymarket CLOB probada con `py-clob-client`.
+- Arquitectura basada en agentes documentada en archivos `.md`:
+  - `AGENT_DATA_INGESTION.md`
+  - `AGENT_MARKET_STATE.md`
+  - `AGENT_STRATEGY.md`
+  - `AGENT_RISK_SAFETY.md`
+  - `AGENT_EXECUTION.md`
+  - `AGENT_MONITORING.md`
+- Sin claves privadas ni API keys en este repositorio (toda la configuración sensible va en `.env`, ignorado por Git).
+
+## Estructura
+
+```text
+your_bot/
+  README.md
+  AGENT_DATA_INGESTION.md
+  AGENT_MARKET_STATE.md
+  AGENT_STRATEGY.md
+  AGENT_RISK_SAFETY.md
+  AGENT_EXECUTION.md
+  AGENT_MONITORING.md
+  src/
+    (implementaciones de los agentes en Python)
+```
+
+## Configuración local (no incluida en este repo)
+
+Crear un archivo `.env` (NO subir a GitHub) con variables como:
+
+```env
+POLYMARKET_PRIVATE_KEY=0x...
+POLYMARKET_FUNDER_ADDRESS=0x...
+POLYMARKET_CLOB_HOST=https://clob.polymarket.com
+POLYMARKET_CHAIN_ID=137
+POLY_BUILDER_CODE=0x...
+```
+
+## Uso en local
+
+```bash
+git clone https://github.com/guillermojhoel2718-code/PsychTrader-IPN-Bot.git
+cd PsychTrader-IPN-Bot
+
+python -m venv venv
+source venv/bin/activate   # Linux/Mac
+# o
+.\venv\Scripts\Activate    # Windows
+
+pip install py-clob-client python-dotenv eth-account
+```

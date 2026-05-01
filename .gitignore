@@ -1,0 +1,26 @@
+# Entornos de Python
+venv/
+.env
+*.env
+
+# Archivos sensibles
+*.key
+*.pem
+*.p12
+
+# Archivos de caché/compilados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Configuración local
+.idea/
+.vscode/
+*.log
+
+# Datos temporales
+output/
+tmp/
+*.csv
+*.json

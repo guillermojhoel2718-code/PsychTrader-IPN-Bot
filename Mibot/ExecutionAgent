@@ -1,0 +1,21 @@
+from py_clob_client.client import ClobClient
+from py_clob_client.constants import POLYGON
+
+host = os.getenv("POLYMARKET_CLOB_HOST", "https://clob.polymarket.com")
+chain_id = int(os.getenv("POLYMARKET_CHAIN_ID", POLYGON))
+priv_key = os.getenv("POLYMARKET_PRIVATE_KEY_MAGIC") or os.getenv("POLYMARKET_PRIVATE_KEY_METAMASK")
+
+if not priv_key.startswith("0x"):
+    priv_key = "0x" + priv_key
+
+client = ClobClient(host, key=priv_key, chain_id=chain_id)
+
+api_key = os.getenv("POLYMARKET_API_KEY")
+api_secret = os.getenv("POLYMARKET_API_SECRET")
+api_passphrase = os.getenv("POLYMARKET_API_PASSPHRASE")
+
+client.set_api_creds({
+    "key": api_key,
+    "secret": api_secret,
+    "passphrase": api_passphrase,
+})

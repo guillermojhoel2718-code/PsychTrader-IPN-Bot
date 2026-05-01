@@ -1,0 +1,102 @@
+### Skill: Entry Logic (ETH 15m Psychology System)
+
+Responsabilidad:  
+Decidir si el bot debe abrir una nueva posición (apuesta up/down) en el mercado de ETH 15m de Polymarket, aplicando las reglas de la sección 2 de `claude.md` (2.1–2.4) y respetando la ventana temporal de entrada.
+
+Entradas:
+- `MarketState`:
+  - `price_now`: precio actual de ETH.
+  - `price_ref`: precio de ETH al inicio de la ronda 15m.
+  - `delta_5m` (`Δ5m`): cambio de precio de ETH en los últimos 5 minutos.
+  - `delta_15m` (`Δ15m`): cambio de precio de ETH en los últimos 15 minutos.
+  - `t`: segundos restantes de la ronda (0–900).
+  - `bet_price`: precio actual de la cuota Polymarket (0–1).
+  - `vol_state`: `low` | `medium` | `high`.
+  - `trend_state`: `bull` | `bear` | `indecise` (puede venir de formulario humano o heurística automática).
+  - `is_day`: booleano que indica si está en horario diurno.
+
+- `Settings` (parte de `settings.json`):
+  - `entry_window_start_s` (ej. 150).
+  - `entry_window_end_s` (ej. 180).
+  - `day_entry_max_t_s` (ej. 120).
+  - `max_bet_price` (0.90).
+  - `late_entry_t_s` (60).
+  - Umbrales de `delta_5m` y `delta_15m` para tendencias fuertes.
+
+Salidas:
+- `TradeSignal` o `None`:
+  - `direction`: `"UP"` o `"DOWN"`.
+  - `pos_size`: tamaño en USD (1, 3 o 5).
+  - `reason`: etiqueta de texto indicando qué regla disparó la entrada (ej. `"trend_diff_2usd_bull"`).
+  - `timestamp`: momento de generación (puede ser añadido por el agente).
+
+---
+
+#### Regla 1: Ventanas de tiempo permitidas
+
+1. Rechazar entrada si `t <= 30` segundos (últimos 30 s no se consideran para nuevas apuestas).
+2. En horario `is_day = true`, solo considerar entradas si `t <= day_entry_max_t_s` (ej. 120 s).
+3. Regla base de ventana principal:
+   - Preferentemente, evaluar entradas cuando `entry_window_start_s <= t <= entry_window_end_s` (ej. 150–180 s).
+   - Se permite cierta flexibilidad (por ejemplo aceptar hasta `t ≈ 120`) si `trend_state` indica tendencia fuerte.
+
+---
+
+#### Regla 2: Filtro por precio de cuota (`bet_price`)
+
+1. Si `bet_price >= max_bet_price` (ej. 0.90) y `t > late_entry_t_s` (ej. 60):
+   - No se abre nueva posición.
+2. Excepción: si `t <= late_entry_t_s` (último minuto) y `bet_price ≈ 0.90`:
+   - Permitir entrada solo con `pos_size = 1` USD y solo si la señal de tendencia es muy clara.
+
+---
+
+#### Regla 3: Tamaño de posición según `diff`
+
+Definimos:
+- `diff = abs(price_now - price_ref)` (diferencia entre el precio actual y el precio al inicio de la ronda).
+
+Asignación de `pos_size`:
+- Si `diff >= 2` → `pos_size = 5`.
+- Si `1 <= diff < 2` → `pos_size = 3`.
+- Si `diff < 1` → `pos_size = 1` (especialmente si el mercado está indeciso).
+
+---
+
+#### Regla 4: Dirección de la apuesta
+
+1. Si `trend_state = "bull"`:
+   - `direction = "UP"`.
+2. Si `trend_state = "bear"`:
+   - `direction = "DOWN"`.
+3. Si `trend_state = "indecise"`:
+   - Solo se permite `pos_size <= 1`.
+   - Solo habilitar entrada si `bet_price` está en un rango atractivo, por ejemplo `0.4 <= bet_price <= 0.6`.
+   - Puedes elegir un sesgo por defecto (ej. `"UP"`) o no entrar si no hay criterio claro.
+
+---
+
+#### Regla 5: Tendencias fuertes y filtros adicionales
+
+1. Tendencia fuerte:
+   - Si `delta_5m >= 1` y `delta_15m >= 3` → `trend_state` se considera alcista fuerte.
+   - Si `delta_5m <= -1` y `delta_15m <= -3` → bajista fuerte.
+2. Post-rally:
+   - Si `abs(delta_15m) >= post_rally_threshold_usd` (ej. 6) y `t <= 60`, no abrir nuevas entradas (modo “post-rally difícil”).
+
+---
+
+#### Lógica de salida de este skill
+
+El skill `entry_logic`:
+
+1. Recibe un `MarketState` y `Settings`.
+2. Aplica todas las reglas anteriores en orden:
+   - Tiempo → filtro de cuota → cálculo de `diff` → asignación de `pos_size` → determinación de `direction` → filtros de tendencia fuerte / post-rally.
+3. Si alguna regla bloquea la entrada, devuelve `None`.
+4. Si se da una señal válida, devuelve `TradeSignal` con:
+   - `direction`,
+   - `pos_size`,
+   - `reason` (por ejemplo `"entry_window_trend_bull_diff_2usd"`) para logging y análisis posterior.
+
+Este skill **no** debe tener efectos secundarios (no ejecuta trades); solo decide si hay o no señal de entrada. La ejecución real la realizará el agente principal después de pasar por el skill de seguridad (`risk_safety`).
