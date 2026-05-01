@@ -1,26 +1,35 @@
-# Entornos de Python
+# Entornos virtuales
 venv/
+.venv/
+env/
+bin/
+lib/
+share/
+
+# Archivos de entorno y secretos
 .env
 *.env
-
-# Archivos sensibles
+settings.local
 *.key
 *.pem
 *.p12
 
-# Archivos de caché/compilados
+# Caché y compilados de Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Configuración local
-.idea/
+# Configuración local de IDE
 .vscode/
-*.log
+.idea/
+*.swp
+*.swo
 
-# Datos temporales
+# Logs y datos temporales
+*.log
 output/
 tmp/
 *.csv
 *.json
+
